@@ -141,8 +141,6 @@ function AvatarBody({ shapeId }: { shapeId: BodyShapeId }) {
     <mesh
       ref={meshRef}
       geometry={geoRef.current!}
-      castShadow
-      receiveShadow
       position={[0, -0.75, 0]}
       onPointerDown={() => { userInteracted.current = true; }}
     >
@@ -168,7 +166,6 @@ function AvatarHead({ shapeId }: { shapeId: BodyShapeId }) {
     <mesh
       ref={headRef}
       position={[0, HEAD_Y - 0.75, 0]}
-      castShadow
       onPointerDown={() => { userInteracted.current = true; }}
     >
       <sphereGeometry args={[HEAD_R, 32, 32]} />
@@ -185,7 +182,7 @@ function AvatarHead({ shapeId }: { shapeId: BodyShapeId }) {
 // ─── Platform ─────────────────────────────────────────────────────────────────
 function Platform() {
   return (
-    <mesh position={[0, -0.77, 0]} receiveShadow>
+    <mesh position={[0, -0.77, 0]}>
       <cylinderGeometry args={[0.38, 0.42, 0.04, 48]} />
       <meshStandardMaterial color="#D4CFC9" roughness={0.8} metalness={0.02} />
     </mesh>
@@ -197,15 +194,10 @@ function Scene({ shapeId }: { shapeId: BodyShapeId }) {
   return (
     <>
       {/* Studio lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[3, 5, 3]}
-        intensity={1.4}
-        castShadow
-        shadow-mapSize={[1024, 1024] as any}
-      />
-      <directionalLight position={[-3, 3, -2]} intensity={0.5} color="#d0e8ff" />
-      <directionalLight position={[0, -2, 3]}  intensity={0.25} color="#fff5e0" />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[3, 5, 3]} intensity={1.6} />
+      <directionalLight position={[-3, 3, -2]} intensity={0.6} color="#d0e8ff" />
+      <directionalLight position={[0, -2, 3]} intensity={0.3} color="#fff5e0" />
 
       <AvatarBody shapeId={shapeId} />
       <AvatarHead shapeId={shapeId} />
@@ -252,7 +244,6 @@ export default function BodyAvatar3D({ shapeId, className }: Props) {
     <div className={`relative ${className ?? ''}`}>
       <AvatarErrorBoundary>
         <Canvas
-          shadows
           camera={{ position: [0, 0.15, 3.2], fov: 38 }}
           style={{ background: 'transparent' }}
           dpr={[1, 2]}
