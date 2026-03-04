@@ -1,30 +1,37 @@
 'use client';
 import { BODY_SHAPES } from '@/data/styleData';
 import type { BodyShapeId } from '@/lib/bodyShapeAlgorithm';
-import BodyAvatar3D from '@/components/body-avatar-3d';
+import BodyAvatarFigure, { SHAPE_PRESETS } from '@/components/body-avatar-3d';
 
 interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
 }
 
-const SHAPES: { id: BodyShapeId; label: string; sub: string }[] = [
-  { id: 'hourglass',           label: 'שעון חול',    sub: 'Bust = Hips' },
-  { id: 'pear',                label: 'אגס',          sub: 'Hips > Bust' },
-  { id: 'apple',               label: 'תפוח',         sub: 'Fuller Middle' },
-  { id: 'rectangle',           label: 'מלבן',         sub: 'Uniform' },
-  { id: 'inverted-triangle',   label: 'משולש הפוך',  sub: 'Shoulders > Hips' },
+const SHAPES: { id: BodyShapeId; label: string }[] = [
+  { id: 'hourglass',           label: 'שעון חול'   },
+  { id: 'pear',                label: 'אגס'         },
+  { id: 'apple',               label: 'תפוח'        },
+  { id: 'rectangle',           label: 'מלבן'        },
+  { id: 'inverted-triangle',   label: 'משולש הפוך' },
 ];
 
 export default function BodyShapeSelector({ selected, onSelect }: Props) {
   const activeId = (selected ?? 'hourglass') as BodyShapeId;
-  const shape = BODY_SHAPES.find((b) => b.id === activeId)!;
+  const shape    = BODY_SHAPES.find((b) => b.id === activeId)!;
+  const preset   = SHAPE_PRESETS[activeId];
 
   return (
     <div className="w-full space-y-4">
-      {/* 3D Avatar */}
-      <div className="bg-neutral-900 w-full" style={{ height: 280 }}>
-        <BodyAvatar3D shapeId={activeId} className="w-full h-full" />
+      {/* Avatar */}
+      <div className="bg-neutral-900 w-full flex items-center justify-center" style={{ height: 300 }}>
+        <BodyAvatarFigure
+          bust={preset.bust}
+          waist={preset.waist}
+          hips={preset.hips}
+          showAnnotations={false}
+          style={{ maxWidth: 160, height: '100%' }}
+        />
       </div>
 
       {/* Shape buttons */}
@@ -44,7 +51,7 @@ export default function BodyShapeSelector({ selected, onSelect }: Props) {
         ))}
       </div>
 
-      {/* Info */}
+      {/* Description */}
       {shape && (
         <div className="border border-stone-200 p-4 bg-stone-50">
           <p className="text-xs text-stone-500 leading-relaxed">{shape.description}</p>
