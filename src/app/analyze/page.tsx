@@ -27,7 +27,13 @@ export default function AnalyzePage() {
     setLoading(true);
     try {
       const result = await analyzeImage(file);
-      router.push(`/results/${result.id}`);
+      const params = new URLSearchParams({
+        seasonId:   result.seasonId,
+        skinTone:   result.skinToneId,
+        bodyShape:  result.bodyShape,
+        styles:     '',
+      });
+      router.push(`/quiz/results?${params.toString()}`);
     } catch (err) {
       console.error(err);
       alert('אירעה שגיאה בניתוח התמונה. נסי שוב.');

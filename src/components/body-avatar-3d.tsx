@@ -1,8 +1,13 @@
 'use client';
 import { useRef, Component, type ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+import {
+  BODY_PROFILES,
+  PROFILE_Y,
+  N_PROFILE_POINTS,
+  type BodyShapeId,
+} from '@/lib/bodyShapeAlgorithm';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 class AvatarErrorBoundary extends Component<
@@ -14,106 +19,104 @@ class AvatarErrorBoundary extends Component<
     this.state = { hasError: false };
   }
   static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(err: unknown) { console.warn('[BodyAvatar3D] WebGL error caught:', err); }
+  componentDidCatch(err: unknown) { console.warn('[BodyAvatar3D] error:', err); }
   render() {
     if (this.state.hasError) {
       return this.props.fallback ?? (
         <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-          <div className="text-center">
-            <p className="text-stone-400 text-xs tracking-widest uppercase mb-1">3D Preview</p>
-            <p className="text-stone-600 text-[10px]">WebGL not available</p>
-          </div>
+          <p className="text-stone-500 text-xs tracking-widest uppercase">Preview unavailable</p>
         </div>
       );
     }
     return this.props.children;
   }
 }
-import {
-  BODY_PROFILES,
-  PROFILE_Y,
-  N_PROFILE_POINTS,
-  type BodyShapeId,
-} from '@/lib/bodyShapeAlgorithm';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const N_SEGS = 56; // smoothness of revolution
+const N_SEGS = 48;
 const LERP_SPEED = 0.06;
 const HEAD_Y = 1.62;
 const HEAD_R = 0.135;
 const DEFAULT_SHAPE: BodyShapeId = 'hourglass';
 
-// ─── Build Revolution Solid Geometry ──────────────────────────────────────────
+// ─── Geometry builders ────────────────────────────────────────────────────────
 function buildPositions(profile: number[]): Float32Array {
-  const positions = new Float32Array(N_SEGS * N_PROFILE_POINTS * 3);
+  const out = new Float32Array(N_SEGS * N_PROFILE_POINTS * 3);
   for (let i = 0; i < N_PROFILE_POINTS; i++) {
     const r = profile[i];
     const y = PROFILE_Y[i];
     for (let j = 0; j < N_SEGS; j++) {
       const theta = (j / N_SEGS) * Math.PI * 2;
-      const idx = (i * N_SEGS + j) * 3;
-      positions[idx]     = r * Math.cos(theta);
-      positions[idx + 1] = y;
-      positions[idx + 2] = r * Math.sin(theta);
+      const base = (i * N_SEGS + j) * 3;
+      out[base]     = r * Math.cos(theta);
+      out[base + 1] = y;
+      out[base + 2] = r * Math.sin(theta);
     }
   }
-  return positions;
+  return out;
 }
 
 function buildIndices(): Uint32Array {
-  const indices = new Uint32Array((N_PROFILE_POINTS - 1) * N_SEGS * 6);
-  let idx = 0;
+  const out = new Uint32Array((N_PROFILE_POINTS - 1) * N_SEGS * 6);
+  let k = 0;
   for (let i = 0; i < N_PROFILE_POINTS - 1; i++) {
     for (let j = 0; j < N_SEGS; j++) {
       const a = i * N_SEGS + j;
       const b = i * N_SEGS + (j + 1) % N_SEGS;
       const c = (i + 1) * N_SEGS + j;
       const d = (i + 1) * N_SEGS + (j + 1) % N_SEGS;
-      indices[idx++] = a; indices[idx++] = c; indices[idx++] = b;
-      indices[idx++] = b; indices[idx++] = c; indices[idx++] = d;
+      out[k++] = a; out[k++] = c; out[k++] = b;
+      out[k++] = b; out[k++] = c; out[k++] = d;
     }
   }
-  return indices;
+  return out;
 }
 
-function computeNormals(geo: THREE.BufferGeometry) {
-  geo.computeVertexNormals();
+// ─── Drag state shared across body + head ─────────────────────────────────────
+interface DragState {
+  active: boolean;
+  lastX: number;
+  manualY: number;
+  autoY: number;
+  useAuto: boolean;
 }
 
-// ─── Animated Body Mesh ───────────────────────────────────────────────────────
-function AvatarBody({ shapeId }: { shapeId: BodyShapeId }) {
-  const meshRef        = useRef<THREE.Mesh>(null!);
+// ─── Scene (body + head + platform + lights) ─────────────────────────────────
+function Scene({
+  shapeId,
+  drag,
+}: {
+  shapeId: BodyShapeId;
+  drag: React.MutableRefObject<DragState>;
+}) {
+  const groupRef       = useRef<THREE.Group>(null!);
   const currentProfile = useRef<number[]>([...BODY_PROFILES[DEFAULT_SHAPE]]);
-  const autoRotY       = useRef(0);
-  const userInteracted = useRef(false);
+  const targetRef      = useRef(BODY_PROFILES[shapeId]);
+  targetRef.current    = BODY_PROFILES[shapeId];
 
-  // Build geometry once — stable reference via ref so Strict Mode double-invoke is safe
+  // Body geometry — built once
   const geoRef = useRef<THREE.BufferGeometry | null>(null);
   if (!geoRef.current) {
     const geo = new THREE.BufferGeometry();
-    const positions = buildPositions(BODY_PROFILES[DEFAULT_SHAPE]);
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(buildPositions(BODY_PROFILES[DEFAULT_SHAPE]), 3));
     geo.setIndex(new THREE.BufferAttribute(buildIndices(), 1));
-    computeNormals(geo);
+    geo.computeVertexNormals();
     geoRef.current = geo;
   }
 
-  const targetProfileRef = useRef(BODY_PROFILES[shapeId]);
-  targetProfileRef.current = BODY_PROFILES[shapeId];
-
   useFrame(() => {
-    const cp     = currentProfile.current;
-    const target = targetProfileRef.current;
-    let changed  = false;
+    // ---- morph profile ----
+    const cp = currentProfile.current;
+    const tp = targetRef.current;
+    let dirty = false;
     for (let i = 0; i < N_PROFILE_POINTS; i++) {
-      const diff = target[i] - cp[i];
+      const diff = tp[i] - cp[i];
       if (Math.abs(diff) > 0.0002) {
         cp[i] += diff * LERP_SPEED;
-        changed = true;
+        dirty = true;
       }
     }
-
-    if (changed && geoRef.current) {
+    if (dirty && geoRef.current) {
       const pos = geoRef.current.attributes.position as THREE.BufferAttribute;
       const arr = pos.array as Float32Array;
       for (let i = 0; i < N_PROFILE_POINTS; i++) {
@@ -121,102 +124,58 @@ function AvatarBody({ shapeId }: { shapeId: BodyShapeId }) {
         const y = PROFILE_Y[i];
         for (let j = 0; j < N_SEGS; j++) {
           const theta = (j / N_SEGS) * Math.PI * 2;
-          const idx   = (i * N_SEGS + j) * 3;
-          arr[idx]     = r * Math.cos(theta);
-          arr[idx + 1] = y;
-          arr[idx + 2] = r * Math.sin(theta);
+          const base = (i * N_SEGS + j) * 3;
+          arr[base]     = r * Math.cos(theta);
+          arr[base + 1] = y;
+          arr[base + 2] = r * Math.sin(theta);
         }
       }
       pos.needsUpdate = true;
       geoRef.current.computeVertexNormals();
     }
 
-    if (meshRef.current) {
-      autoRotY.current += 0.003;
-      if (!userInteracted.current) meshRef.current.rotation.y = autoRotY.current;
+    // ---- rotation ----
+    if (!groupRef.current) return;
+    const d = drag.current;
+    if (d.useAuto) {
+      d.autoY += 0.004;
+      groupRef.current.rotation.y = d.autoY;
+    } else {
+      groupRef.current.rotation.y = d.manualY;
     }
   });
 
-  return (
-    <mesh
-      ref={meshRef}
-      geometry={geoRef.current!}
-      position={[0, -0.75, 0]}
-      onPointerDown={() => { userInteracted.current = true; }}
-    >
-      <meshStandardMaterial color="#E8DDD0" roughness={0.55} metalness={0.05} />
-    </mesh>
-  );
-}
+  const bodyMat  = { color: '#E8DDD0', roughness: 0.55, metalness: 0.05 } as const;
+  const platMat  = { color: '#D4CFC9', roughness: 0.8,  metalness: 0.02 } as const;
 
-// ─── Head ─────────────────────────────────────────────────────────────────────
-function AvatarHead({ shapeId }: { shapeId: BodyShapeId }) {
-  const headRef = useRef<THREE.Mesh>(null!);
-  const autoRotY = useRef(0);
-  const userInteracted = useRef(false);
-
-  useFrame(() => {
-    autoRotY.current += 0.003;
-    if (headRef.current && !userInteracted.current) {
-      headRef.current.rotation.y = autoRotY.current;
-    }
-  });
-
-  return (
-    <mesh
-      ref={headRef}
-      position={[0, HEAD_Y - 0.75, 0]}
-      onPointerDown={() => { userInteracted.current = true; }}
-    >
-      <sphereGeometry args={[HEAD_R, 32, 32]} />
-      <meshStandardMaterial
-        color="#E8DDD0"
-        roughness={0.55}
-        metalness={0.05}
-        envMapIntensity={0.6}
-      />
-    </mesh>
-  );
-}
-
-// ─── Platform ─────────────────────────────────────────────────────────────────
-function Platform() {
-  return (
-    <mesh position={[0, -0.77, 0]}>
-      <cylinderGeometry args={[0.38, 0.42, 0.04, 48]} />
-      <meshStandardMaterial color="#D4CFC9" roughness={0.8} metalness={0.02} />
-    </mesh>
-  );
-}
-
-// ─── Scene ────────────────────────────────────────────────────────────────────
-function Scene({ shapeId }: { shapeId: BodyShapeId }) {
   return (
     <>
-      {/* Studio lighting */}
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[3, 5, 3]} intensity={1.6} />
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[3, 5, 3]}   intensity={1.6} />
       <directionalLight position={[-3, 3, -2]} intensity={0.6} color="#d0e8ff" />
-      <directionalLight position={[0, -2, 3]} intensity={0.3} color="#fff5e0" />
+      <directionalLight position={[0, -2, 3]}  intensity={0.3} color="#fff5e0" />
 
-      <AvatarBody shapeId={shapeId} />
-      <AvatarHead shapeId={shapeId} />
-      <Platform />
-
-      <OrbitControls
-        enablePan={false}
-        minDistance={2}
-        maxDistance={5.5}
-        minPolarAngle={0.3}
-        maxPolarAngle={Math.PI / 1.7}
-        enableDamping
-        dampingFactor={0.08}
-      />
+      <group ref={groupRef}>
+        {/* Body */}
+        <mesh geometry={geoRef.current!} position={[0, -0.75, 0]}>
+          <meshStandardMaterial {...bodyMat} />
+        </mesh>
+        {/* Head */}
+        <mesh position={[0, HEAD_Y - 0.75, 0]}>
+          <sphereGeometry args={[HEAD_R, 32, 32]} />
+          <meshStandardMaterial {...bodyMat} />
+        </mesh>
+        {/* Platform */}
+        <mesh position={[0, -0.77, 0]}>
+          <cylinderGeometry args={[0.38, 0.42, 0.04, 48]} />
+          <meshStandardMaterial {...platMat} />
+        </mesh>
+      </group>
     </>
   );
 }
 
-// ─── Shape Labels ──────────────────────────────────────────────────────────────
+// ─── Labels ───────────────────────────────────────────────────────────────────
 const SHAPE_LABEL: Record<BodyShapeId, string> = {
   hourglass:           'שעון חול',
   pear:                'אגס',
@@ -240,19 +199,54 @@ interface Props {
 }
 
 export default function BodyAvatar3D({ shapeId, className }: Props) {
+  const drag = useRef<DragState>({
+    active: false,
+    lastX: 0,
+    manualY: 0,
+    autoY: 0,
+    useAuto: true,
+  });
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    drag.current.active = true;
+    drag.current.lastX  = e.clientX;
+    drag.current.useAuto = false;
+    drag.current.manualY = drag.current.autoY;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!drag.current.active) return;
+    const dx = e.clientX - drag.current.lastX;
+    drag.current.lastX    = e.clientX;
+    drag.current.manualY += dx * 0.012;
+    drag.current.autoY    = drag.current.manualY;
+  }
+
+  function onPointerUp() {
+    drag.current.active = false;
+  }
+
   return (
-    <div className={`relative ${className ?? ''}`}>
+    <div
+      className={`relative select-none ${className ?? ''}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
+      style={{ cursor: 'grab' }}
+    >
       <AvatarErrorBoundary>
         <Canvas
           camera={{ position: [0, 0.15, 3.2], fov: 38 }}
-          style={{ background: 'transparent' }}
-          dpr={[1, 2]}
+          style={{ background: 'transparent', display: 'block', width: '100%', height: '100%' }}
+          dpr={[1, 1.5]}
         >
-          <Scene shapeId={shapeId} />
+          <Scene shapeId={shapeId} drag={drag} />
         </Canvas>
       </AvatarErrorBoundary>
 
-      {/* Shape label overlay */}
+      {/* Labels */}
       <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center pointer-events-none">
         <p className="text-[10px] tracking-[0.25em] uppercase text-stone-400 mb-0.5">
           {SHAPE_DESC[shapeId]}
@@ -261,8 +255,6 @@ export default function BodyAvatar3D({ shapeId, className }: Props) {
           {SHAPE_LABEL[shapeId]}
         </p>
       </div>
-
-      {/* Drag hint */}
       <p className="absolute top-3 left-0 right-0 text-center text-[10px] tracking-[0.2em] uppercase text-stone-300 pointer-events-none">
         Drag to rotate
       </p>
