@@ -1,7 +1,7 @@
 'use client';
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   BODY_PROFILES,
@@ -56,39 +56,38 @@ function computeNormals(geo: THREE.BufferGeometry) {
 
 // ─── Animated Body Mesh ───────────────────────────────────────────────────────
 function AvatarBody({ shapeId }: { shapeId: BodyShapeId }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const geoRef  = useRef<THREE.BufferGeometry>(null!);
+  const meshRef        = useRef<THREE.Mesh>(null!);
   const currentProfile = useRef<number[]>([...BODY_PROFILES[DEFAULT_SHAPE]]);
-  const autoRotY = useRef(0);
+  const autoRotY       = useRef(0);
   const userInteracted = useRef(false);
 
-  // Build geometry once
-  const { geometry, indices } = useMemo(() => {
+  // Build geometry once — stable reference via ref so Strict Mode double-invoke is safe
+  const geoRef = useRef<THREE.BufferGeometry | null>(null);
+  if (!geoRef.current) {
     const geo = new THREE.BufferGeometry();
     const positions = buildPositions(BODY_PROFILES[DEFAULT_SHAPE]);
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const idx = buildIndices();
-    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.setIndex(new THREE.BufferAttribute(buildIndices(), 1));
     computeNormals(geo);
     geoRef.current = geo;
-    return { geometry: geo, indices: idx };
-  }, []);
+  }
 
-  // Target profile changes when shapeId prop changes
-  const targetProfile = BODY_PROFILES[shapeId];
+  const targetProfileRef = useRef(BODY_PROFILES[shapeId]);
+  targetProfileRef.current = BODY_PROFILES[shapeId];
 
-  useFrame(({ clock }) => {
-    const cp = currentProfile.current;
-    let changed = false;
+  useFrame(() => {
+    const cp     = currentProfile.current;
+    const target = targetProfileRef.current;
+    let changed  = false;
     for (let i = 0; i < N_PROFILE_POINTS; i++) {
-      const diff = targetProfile[i] - cp[i];
+      const diff = target[i] - cp[i];
       if (Math.abs(diff) > 0.0002) {
         cp[i] += diff * LERP_SPEED;
         changed = true;
       }
     }
 
-    if (changed) {
+    if (changed && geoRef.current) {
       const pos = geoRef.current.attributes.position as THREE.BufferAttribute;
       const arr = pos.array as Float32Array;
       for (let i = 0; i < N_PROFILE_POINTS; i++) {
@@ -106,30 +105,22 @@ function AvatarBody({ shapeId }: { shapeId: BodyShapeId }) {
       geoRef.current.computeVertexNormals();
     }
 
-    // Slow auto-rotate
     if (meshRef.current) {
       autoRotY.current += 0.003;
-      if (!userInteracted.current) {
-        meshRef.current.rotation.y = autoRotY.current;
-      }
+      if (!userInteracted.current) meshRef.current.rotation.y = autoRotY.current;
     }
   });
 
   return (
     <mesh
       ref={meshRef}
-      geometry={geometry}
+      geometry={geoRef.current!}
       castShadow
       receiveShadow
       position={[0, -0.75, 0]}
       onPointerDown={() => { userInteracted.current = true; }}
     >
-      <meshStandardMaterial
-        color="#E8DDD0"
-        roughness={0.55}
-        metalness={0.05}
-        envMapIntensity={0.6}
-      />
+      <meshStandardMaterial color="#E8DDD0" roughness={0.55} metalness={0.05} />
     </mesh>
   );
 }
@@ -185,8 +176,7 @@ function Scene({ shapeId }: { shapeId: BodyShapeId }) {
         position={[3, 5, 3]}
         intensity={1.4}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize={[1024, 1024] as any}
       />
       <directionalLight position={[-3, 3, -2]} intensity={0.5} color="#d0e8ff" />
       <directionalLight position={[0, -2, 3]}  intensity={0.25} color="#fff5e0" />

@@ -1,37 +1,60 @@
 'use client';
+import dynamic from 'next/dynamic';
 import { BODY_SHAPES } from '@/data/styleData';
+import type { BodyShapeId } from '@/lib/bodyShapeAlgorithm';
+
+const BodyAvatar3D = dynamic(() => import('@/components/body-avatar-3d'), {
+  ssr: false,
+  loading: () => <div className="w-full h-64 bg-neutral-900 flex items-center justify-center"><div className="w-6 h-6 border-2 border-stone-500 border-t-stone-200 rounded-full animate-spin" /></div>,
+});
 
 interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
 }
 
+const SHAPES: { id: BodyShapeId; label: string; sub: string }[] = [
+  { id: 'hourglass',           label: 'שעון חול',    sub: 'Bust = Hips' },
+  { id: 'pear',                label: 'אגס',          sub: 'Hips > Bust' },
+  { id: 'apple',               label: 'תפוח',         sub: 'Fuller Middle' },
+  { id: 'rectangle',           label: 'מלבן',         sub: 'Uniform' },
+  { id: 'inverted-triangle',   label: 'משולש הפוך',  sub: 'Shoulders > Hips' },
+];
+
 export default function BodyShapeSelector({ selected, onSelect }: Props) {
+  const activeId = (selected ?? 'hourglass') as BodyShapeId;
+  const shape = BODY_SHAPES.find((b) => b.id === activeId)!;
+
   return (
-    <div className="w-full">
-      <p className="text-sm text-gray-500 mb-4 text-center">בחרי את מבנה הגוף שהכי מתאר אותך</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {BODY_SHAPES.map((shape) => (
+    <div className="w-full space-y-4">
+      {/* 3D Avatar */}
+      <div className="bg-neutral-900 w-full" style={{ height: 280 }}>
+        <BodyAvatar3D shapeId={activeId} className="w-full h-full" />
+      </div>
+
+      {/* Shape buttons */}
+      <div className="grid grid-cols-5 gap-1">
+        {SHAPES.map((s) => (
           <button
-            key={shape.id}
-            onClick={() => onSelect(shape.id)}
-            className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all hover:scale-105 ${
-              selected === shape.id
-                ? 'border-rose-500 bg-rose-50 shadow-lg shadow-rose-200'
-                : 'border-gray-200 bg-white hover:border-rose-300'
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            className={`py-2.5 px-1 text-center text-xs font-medium tracking-wide transition-all border ${
+              activeId === s.id
+                ? 'bg-neutral-900 text-white border-neutral-900'
+                : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'
             }`}
           >
-            <span className="text-4xl">{shape.emoji}</span>
-            <p className="font-semibold text-gray-800 text-sm">{shape.label}</p>
-            <p className="text-xs text-gray-500 text-center leading-relaxed">{shape.description}</p>
-            {selected === shape.id && (
-              <span className="absolute top-2 left-2 w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center text-white text-xs">
-                ✓
-              </span>
-            )}
+            {s.label}
           </button>
         ))}
       </div>
+
+      {/* Info */}
+      {shape && (
+        <div className="border border-stone-200 p-4 bg-stone-50">
+          <p className="text-xs text-stone-500 leading-relaxed">{shape.description}</p>
+        </div>
+      )}
     </div>
   );
 }
