@@ -1,12 +1,7 @@
 'use client';
-import dynamic from 'next/dynamic';
 import { BODY_SHAPES } from '@/data/styleData';
 import type { BodyShapeId } from '@/lib/bodyShapeAlgorithm';
-
-const BodyAvatar3D = dynamic(() => import('@/components/body-avatar-3d'), {
-  ssr: false,
-  loading: () => <div className="w-full h-64 bg-neutral-900 flex items-center justify-center"><div className="w-6 h-6 border-2 border-stone-500 border-t-stone-200 rounded-full animate-spin" /></div>,
-});
+import BodyAvatar3D from '@/components/body-avatar-3d';
 
 interface Props {
   selected: string | null;

@@ -1,18 +1,9 @@
 'use client';
 import { useState, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { BODY_SHAPES } from '@/data/styleData';
 import { detectBodyShape, type BodyShapeId, type Measurements } from '@/lib/bodyShapeAlgorithm';
-
-const BodyAvatar3D = dynamic(() => import('@/components/body-avatar-3d'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-    </div>
-  ),
-});
+import BodyAvatar3D from '@/components/body-avatar-3d';
 
 const SHAPES: { id: BodyShapeId; label: string; ratio: string }[] = [
   { id: 'hourglass',           label: 'שעון חול',    ratio: 'Bust = Hips, Narrow Waist' },
