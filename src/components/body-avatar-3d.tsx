@@ -1,8 +1,34 @@
 'use client';
-import { useRef } from 'react';
+import { useRef, Component, type ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+class AvatarErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(err: unknown) { console.warn('[BodyAvatar3D] WebGL error caught:', err); }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+          <div className="text-center">
+            <p className="text-stone-400 text-xs tracking-widest uppercase mb-1">3D Preview</p>
+            <p className="text-stone-600 text-[10px]">WebGL not available</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   BODY_PROFILES,
   PROFILE_Y,
@@ -224,14 +250,16 @@ interface Props {
 export default function BodyAvatar3D({ shapeId, className }: Props) {
   return (
     <div className={`relative ${className ?? ''}`}>
-      <Canvas
-        shadows
-        camera={{ position: [0, 0.15, 3.2], fov: 38 }}
-        style={{ background: 'transparent' }}
-        dpr={[1, 2]}
-      >
-        <Scene shapeId={shapeId} />
-      </Canvas>
+      <AvatarErrorBoundary>
+        <Canvas
+          shadows
+          camera={{ position: [0, 0.15, 3.2], fov: 38 }}
+          style={{ background: 'transparent' }}
+          dpr={[1, 2]}
+        >
+          <Scene shapeId={shapeId} />
+        </Canvas>
+      </AvatarErrorBoundary>
 
       {/* Shape label overlay */}
       <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center pointer-events-none">
