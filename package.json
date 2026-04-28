@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "repo:guard": "node scripts/public-repo-guard.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.8.0",
@@ -24,4 +25,4 @@
     "postcss": "^8.4.31",
     "typescript": "5.3.3"
   }
-}
+}\n
